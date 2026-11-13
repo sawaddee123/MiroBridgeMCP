@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execFile } from 'node:child_process';
+import { execFile, execSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
@@ -68,7 +68,7 @@ http.listen(PORT, '127.0.0.1', () => log(`app + bridge on ${ORIGIN}`));
 
 function call(op, params = {}) {
   if (portError) return Promise.reject(new Error(`Bridge port ${PORT} unavailable (${portError.code}). Usually another Claude session already runs miro-bridge: close it, or use that session. Only one session can drive the board at a time.`));
-  if (!board) return Promise.reject(new Error(`No Miro board connected. Ask the user to check: 1) the MiroBridgeMCP app is installed in the board's team (install link from whoever shared miro-bridge), 2) a board of that team is open in Chrome/Edge or the Miro desktop app, 3) reload the board tab once. Brave: allow localhost access for miro.com. Diagnose with: npx miro-bridge-mcp --check`));
+  if (!board) return Promise.reject(new Error(`No Miro board connected. Ask the user to check: 1) the MiroBridgeMCP app is installed in the board's team (install link from whoever shared miro-bridge), 2) a board of that team is open in Chrome/Edge or the Miro desktop app, 3) reload the board tab once. Brave: allow localhost access for miro.com. Diagnose with: miro-bridge-mcp check (re-run miro-bridge-mcp setup to repair)`));
   const id = randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Board did not answer "${op}" within ${TIMEOUT_MS / 1000}s`)); }, TIMEOUT_MS);
@@ -207,17 +207,47 @@ mcp.registerTool('capture', {
   }
 });
 
-if (process.argv.includes('--check')) await check();
+const INSTALL_URL = process.env.MIRO_BRIDGE_INSTALL_URL ||
+  'https://miro.com/app-install/?response_type=code&client_id=3458764690361854455&redirect_uri=%2Fapp-install%2Fconfirm%2F';
+const command = process.argv[2];
+if (command === 'setup') await setup();
+else if (command === 'check' || process.argv.includes('--check')) await check();
 else await mcp.connect(new StdioServerTransport());
 
-// `npx miro-bridge-mcp --check`: setup diagnosis for people installing it (prints to stdout; not an MCP session)
-async function check() {
+// `miro-bridge-mcp check`: setup diagnosis for people installing it (prints to stdout; not an MCP session)
+// `miro-bridge-mcp setup`: register with Claude Code, open the Miro app install page, then wait for a board. Safe to re-run (repairs).
+async function setup() {
+  const dry = Boolean(process.env.MIRO_BRIDGE_DRY_RUN);
+  const self = fileURLToPath(import.meta.url).replaceAll('\\', '/');
+  console.log('MiroBridgeMCP setup');
+  if (self.includes('/_npx/')) {
+    console.log('FAIL this copy lives in the npx cache, which gets cleaned up. Install it once, then run setup:\n' +
+      '     npm install -g github:sawaddee123/MiroBridgeMCP\n     miro-bridge-mcp setup');
+    process.exit(1);
+  }
+  // node + absolute path: starts fast, needs no network, and avoids the Windows "cmd /c npx" quirk
+  const add = `claude mcp add MiroBridgeMCP -s user -- node "${self}"`;
+  if (dry) console.log(`DRY  ${add}`);
+  else {
+    try { execSync('claude mcp remove MiroBridgeMCP -s user', { stdio: 'ignore' }); } catch {} // re-run = repair
+    try { execSync(add, { stdio: 'ignore' }); console.log('OK   registered with Claude Code as "MiroBridgeMCP" (restart Claude Code to load it)'); }
+    catch { console.log(`FAIL could not run the claude CLI. Register it yourself:\n     ${add}`); }
+  }
+  console.log(`...  install the Miro app into the team that owns your boards (opening it in your browser):\n     ${INSTALL_URL}`);
+  if (dry) process.exit(0);
+  const [cmd, args] = process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', INSTALL_URL]] // no cmd.exe: the URL has "&"
+    : [process.platform === 'darwin' ? 'open' : 'xdg-open', [INSTALL_URL]];
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+  await check(300);
+}
+
+async function check(defaultWait = 90) {
   const say = (ok, msg) => console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`);
   say(Number(process.versions.node.split('.')[0]) >= 20, `Node ${process.version} (need 20+)`);
   await new Promise((r) => setTimeout(r, 300));
   if (portError) { say(false, `port ${PORT}: ${portError.code}. Another MiroBridgeMCP (Claude session) is probably running; close it and retry.`); process.exit(1); }
   say(true, `bridge listening on ${ORIGIN}`);
-  const waitS = Number(process.env.MIRO_BRIDGE_CHECK_WAIT || 90);
+  const waitS = Number(process.env.MIRO_BRIDGE_CHECK_WAIT || defaultWait);
   console.log(`...  open or reload a Miro board where the MiroBridgeMCP app is installed (waiting ${waitS}s)`);
   for (const end = Date.now() + waitS * 1000; !board && Date.now() < end;) await new Promise((r) => setTimeout(r, 300));
   if (!board) {
@@ -226,7 +256,7 @@ async function check() {
   }
   try {
     const [info, items] = await Promise.all([call('get_board_info'), call('get_items')]);
-    say(true, `board connected: ${info.id} (${items.length} items). Ready: start Claude and ask it about the board.`);
+    say(true, `board connected: ${info.id} (${items.length} items). Ready: (re)start Claude Code and ask it about the board.`);
     process.exit(0);
   } catch (e) { say(false, `board connected but not answering: ${e.message}`); process.exit(1); }
 }

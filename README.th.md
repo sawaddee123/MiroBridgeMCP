@@ -13,22 +13,24 @@ Claude ⇄ MiroBridgeMCP (เครื่องคุณ, localhost:7788) ⇄ �
 
 ---
 
-## สำหรับคนที่ได้รับไปใช้ (≈5 นาที)
+## ติดตั้ง (≈3 นาที ทำครั้งเดียว)
 
-**ต้องมี:** [Node.js 20+](https://nodejs.org), Claude Code, Chrome/Edge หรือ Miro desktop app
+**ต้องมี:** [Node.js 20+](https://nodejs.org), [git](https://git-scm.com), Claude Code, Chrome/Edge หรือ Miro desktop app
 
-1. **ติดตั้งแอปเข้า team ของคุณ** เปิดลิงก์นี้แล้วเลือก team ที่มีบอร์ดของคุณ → Add
-   **https://miro.com/app-install/?response_type=code&client_id=3458764690361854455&redirect_uri=%2Fapp-install%2Fconfirm%2F**
-2. **เพิ่มเข้า Claude Code** (คำสั่งเดียว)
-   ```
-   claude mcp add MiroBridgeMCP -s user -- npx -y github:sawaddee123/MiroBridgeMCP
-   ```
-3. **ตรวจว่าใช้ได้** เปิดบอร์ดใน team นั้นไว้ แล้วรัน
-   ```
-   npx -y github:sawaddee123/MiroBridgeMCP --check
-   ```
-   ต้องเห็น `OK   board connected: ...` (ถ้าไม่ขึ้น ให้กด F5 ที่แท็บบอร์ด 1 ครั้ง)
-4. เปิด Claude Code ใหม่ แล้วสั่งได้เลย เช่น *"สรุปบอร์ดนี้ให้หน่อย"*, *"ทำ retro board จากลิสต์นี้"*, *"จัด sticky ในเฟรมนี้เป็น grid"*
+```
+npm install -g github:sawaddee123/MiroBridgeMCP
+miro-bridge-mcp setup
+```
+
+`setup` ทำให้ครบทุกขั้น และรันซ้ำได้ (= ซ่อมเมื่อมีปัญหา):
+1. ลงทะเบียนกับ Claude Code ให้เอง (ใช้ `node` + path ตรง: เปิดเร็ว ไม่ต้องใช้เน็ต ไม่เจอปัญหา `npx` บน Windows)
+2. เปิดหน้าติดตั้งแอป Miro ให้ → เลือก team ที่มีบอร์ดของคุณ
+3. รอจนคุณเปิดบอร์ดใน team นั้น แล้วยืนยัน `OK   board connected`
+
+จากนั้นเปิด Claude Code ใหม่ แล้วสั่งได้เลย เช่น *"สรุปบอร์ดนี้ให้หน่อย"*, *"ทำ retro board จากลิสต์นี้"*, *"จัด sticky ในเฟรมนี้เป็น grid"*
+
+**ใช้ทุกวัน:** แค่เปิดบอร์ดไว้ ไม่ต้องรันอะไรเพิ่ม · **อัปเดต:** รัน `npm install -g ...` ซ้ำ แล้ว F5 แท็บบอร์ด · **ตรวจ:** `miro-bridge-mcp check`
+**ถอนการติดตั้ง:** `claude mcp remove MiroBridgeMCP -s user` และ `npm rm -g miro-bridge-mcp`
 
 ### Focus: บอก Claude ว่ากำลังสนใจส่วนไหน
 บอร์ดใหญ่มักมีไอเดียเก่าปนอยู่ ลากคลุมสิ่งที่ต้องการ (หรือเลือกเฟรม) แล้วกดไอคอน **MiroBridgeMCP** ในแถบแอป → ขึ้น "Claude focus: N item(s)"
@@ -41,7 +43,7 @@ Claude จะเริ่มจากตรงนั้นก่อน แต่
 
 | อาการ | ทางแก้ |
 |---|---|
-| `No Miro board connected` | แอปติดตั้งใน team ของบอร์ดนี้หรือยัง? → กด F5 ที่แท็บบอร์ด → รัน `--check` |
+| `No Miro board connected` | แอปติดตั้งใน team ของบอร์ดนี้หรือยัง? → กด F5 ที่แท็บบอร์ด → รัน `miro-bridge-mcp check` |
 | ใช้ Brave แล้วไม่ต่อ | Settings → Privacy → **Localhost access** ให้ miro.com (หรือปิด Shields ที่ miro.com) |
 | `port 7788 unavailable` | มี Claude session อื่นใช้อยู่ ปิดอันนั้นก่อน |
 | สร้างของในเฟรมไม่ได้ (`isn't inside a parent frame`) | เอาหน้าต่างบอร์ดขึ้นมาให้เห็นบนจอ (ตอนอยู่เบื้องหลัง Miro ไม่คำนวณเฟรม) |
@@ -95,6 +97,6 @@ Claude จะเริ่มจากตรงนั้นก่อน แต่
 ## พัฒนาต่อ
 
 - `server.js` — MCP tools + WebSocket bridge · `app/index.html` — โค้ดที่รันในบอร์ด (**แก้แล้วต้อง F5 แท็บบอร์ด**) · `capture.ps1` — แคปหน้าจอ
-- `npm test` — ทดสอบด้วยบอร์ดจำลอง ไม่ต้องเปิด Miro · `node server.js --check` — ทดสอบกับบอร์ดจริง · `node scripts/record-demo.mjs` — อัด `docs/demo.gif` ใหม่
+- `npm test` — ทดสอบด้วยบอร์ดจำลอง ไม่ต้องเปิด Miro · `node server.js check` — ทดสอบกับบอร์ดจริง · `node scripts/record-demo.mjs` — อัด `docs/demo.gif` ใหม่
 - เปลี่ยนพอร์ตด้วย `MIRO_BRIDGE_PORT` (ต้องแก้ `sdkUri` ของแอปให้ตรงด้วย ซึ่งกระทบทุกคนที่ใช้แอปเดียวกัน)
 - ข้อจำกัด: rate limit ของ Web SDK (ต่อนาทีต่อผู้ใช้), 1 session ต่อเครื่อง, ไม่ได้ทดสอบบน macOS/Linux (ยกเว้น `capture` ส่วนอื่นควรใช้ได้)

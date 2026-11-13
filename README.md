@@ -22,24 +22,25 @@ Claude ⇄ MCP (stdio) ⇄ MiroBridgeMCP on your machine (localhost:7788) ⇄ ap
 - **Layout** — `arrange_items` lays items out as a grid, row or column.
 - **See the result** — `capture` screenshots the Miro window so Claude can check its own work (Windows).
 
-## Quick start (≈5 minutes)
+## Quick start (≈3 minutes, once)
 
-You need [Node.js 20+](https://nodejs.org), Claude Code, and Chrome/Edge or the Miro desktop app.
+You need [Node.js 20+](https://nodejs.org), [git](https://git-scm.com), Claude Code, and Chrome/Edge or the Miro desktop app.
 
-1. **Install the app into your Miro team** — open the link and pick the team that owns your boards:
-   **https://miro.com/app-install/?response_type=code&client_id=3458764690361854455&redirect_uri=%2Fapp-install%2Fconfirm%2F**
-2. **Add it to Claude Code**
-   ```
-   claude mcp add MiroBridgeMCP -s user -- npx -y github:sawaddee123/MiroBridgeMCP
-   ```
-3. **Check the setup** — open a board of that team, then
-   ```
-   npx -y github:sawaddee123/MiroBridgeMCP --check
-   ```
-   You should see `OK   board connected: ...`. If not, reload the board tab once.
-4. Restart Claude Code and ask: *"Summarize this board"*, *"Turn this list into stickies in a frame"*, *"Arrange the stickies in this frame as a grid"*.
+```
+npm install -g github:sawaddee123/MiroBridgeMCP
+miro-bridge-mcp setup
+```
 
-Keep the board open while you work. One Claude session per machine can drive the board at a time.
+`setup` does everything and is safe to re-run (it repairs a broken setup):
+1. registers the server with Claude Code (`node` + absolute path: fast start, works offline, no Windows `npx` quirks),
+2. opens the Miro install page — pick the team that owns your boards,
+3. waits until you open a board of that team and confirms `OK   board connected`.
+
+Then restart Claude Code and ask: *"Summarize this board"*, *"Turn this list into stickies in a frame"*, *"Arrange the stickies in this frame as a grid"*.
+
+**Day to day:** keep a board open while you work; nothing else to start. One Claude session per machine can drive the board at a time.
+**Update:** run the `npm install -g ...` line again, then reload the board tab. **Check:** `miro-bridge-mcp check`.
+**Uninstall:** `claude mcp remove MiroBridgeMCP -s user` and `npm rm -g miro-bridge-mcp`.
 
 ### Using Focus
 
@@ -66,7 +67,7 @@ Claude can also set it: *"focus on the Act 2 frame"*.
 
 | Symptom | Fix |
 |---|---|
-| `No Miro board connected` | Is the app installed in *this board's* team? Reload the board tab. Run `--check`. |
+| `No Miro board connected` | Is the app installed in *this board's* team? Reload the board tab. Run `miro-bridge-mcp check`. |
 | Brave doesn't connect | Settings → Privacy → allow **Localhost access** for miro.com (or drop Shields on miro.com). |
 | `port 7788 unavailable` | Another Claude session runs MiroBridgeMCP. Close it or use that one. |
 | `isn't inside a parent frame` | Bring the board window on screen; Miro doesn't compute frames while it is in the background. |
@@ -96,7 +97,7 @@ so there is no central server and board data never leaves the user's machine and
 ## Development
 
 - `server.js` — MCP tools, item compaction, WebSocket bridge. `app/index.html` — code that runs inside the board (**reload the board tab after editing**). `capture.ps1` — window screenshot.
-- `npm test` — self-check against a fake board, no Miro needed. `node server.js --check` — check against a real board.
+- `npm test` — self-check against a fake board, no Miro needed. `node server.js check` — check against a real board.
 - `node scripts/record-demo.mjs` — re-record `docs/demo.gif` (creates items far from existing content and deletes them).
 - `MIRO_BRIDGE_PORT` changes the port (the app's `sdkUri` must match).
 - Limits: Web SDK per-minute rate limits; one session per machine; macOS/Linux untested (everything except `capture` should work).

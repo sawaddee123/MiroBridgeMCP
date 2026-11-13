@@ -119,4 +119,9 @@ const code = await new Promise((r) => chk.on('exit', r));
 assert.equal(code, 0, out);
 assert.ok(out.includes('board connected: b1 (3 items)'), out);
 b.close();
+
+// setup (dry run): registers node + this server.js's absolute path, never npx
+const dry = (await import('node:child_process')).execFileSync('node', ['server.js', 'setup'], { env: { ...process.env, MIRO_BRIDGE_DRY_RUN: '1', MIRO_BRIDGE_PORT: String(PORT + 2) } }).toString();
+assert.match(dry, /DRY {2}claude mcp add MiroBridgeMCP -s user -- node ".*\/server\.js"/, dry);
+assert.ok(dry.includes('miro.com/app-install'), dry);
 console.log('ok: all checks passed');
