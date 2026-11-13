@@ -6,6 +6,9 @@
 
 [ภาษาไทย](README.th.md) · [Usage guide](docs/USAGE.md) · MIT licensed · not affiliated with Miro
 
+<p align="center"><img src="docs/demo.gif" width="800" alt="Claude building a flow diagram on a live Miro board through MiroBridgeMCP"><br>
+<sub>Claude builds, connects, arranges and recolors items on a live board. <a href="docs/demo.mp4">Full-quality MP4</a></sub></p>
+
 MiroBridgeMCP runs a tiny Miro app inside the board you have open and talks to it over a local WebSocket.
 Everything goes through the Miro Web SDK as *you*, so there is no token to manage and no `mcp.miro.com` call limit
 (the official Miro MCP allows 100 calls/day on Free).

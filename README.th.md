@@ -6,6 +6,9 @@
 
 [English](README.md) · [คู่มือใช้งานจริง](docs/USAGE.th.md) · MIT · ไม่ได้เป็นส่วนหนึ่งของบริษัท Miro
 
+<p align="center"><img src="docs/demo.gif" width="800" alt="Claude สร้าง flow diagram บน Miro board สดผ่าน MiroBridgeMCP"><br>
+<sub>Claude สร้าง เชื่อม จัดเรียง และเปลี่ยนสีไอเท็มบนบอร์ดจริง · <a href="docs/demo.mp4">MP4 ความละเอียดเต็ม</a></sub></p>
+
 MiroBridgeMCP รันแอปเล็กๆ อยู่ในบอร์ดที่คุณเปิด แล้วคุยกับแอปนั้นผ่าน WebSocket ในเครื่อง
 ทุกอย่างทำผ่าน Miro Web SDK ในสิทธิ์ของ*คุณเอง* จึงไม่ต้องจัดการ token และไม่ติดลิมิตของ `mcp.miro.com` (Miro MCP ทางการให้ 100 ครั้ง/วันบน Free)
 
