@@ -31,9 +31,8 @@ Large boards collect old ideas, drafts and references. Focus says "this is what 
 
 | How | What happens |
 |---|---|
-| Select items → **right-click → Focus AI here** | Focus = those items (replaces the old focus) |
-| Right-click → **Add to AI focus** / **Remove from AI focus** | Grow or shrink the focus |
-| Select items → click the **app icon** in the left toolbar | Same as *Focus AI here*; with nothing selected it clears the focus |
+| Select items → click the **app icon** in the left toolbar | Focus = those items; with nothing selected it clears the focus |
+| Select items → **Focus AI here** / **Add to AI focus** / **Remove from AI focus** in the item toolbar *(beta)* | Replace / grow / shrink the focus |
 | Tell the AI: *"focus on the Act 2 frame"* | The AI calls `set_focus` |
 
 - Focusing a **frame** includes everything on it, even items lying on it without being attached, plus the connectors between them (measured: 1 frame → 48 items incl. 19 connectors).
@@ -80,7 +79,7 @@ Tip: pin the app icon (left toolbar → **More apps** → star it) so it's one c
 
 | Command | When |
 |---|---|
-| `miro-bridge-mcp check` | Anything feels off. Prints service state, login start, board, app version and right-click menu, each OK/FAIL. |
+| `miro-bridge-mcp check` | Anything feels off. Prints service state, login start, board, app version and board menu, each OK/FAIL, with the reason when board menu actions fail. |
 | `miro-bridge-mcp setup` | After an update, or to repair. Safe to re-run: restarts an old service, re-registers, skips the install page if a board is already connected. |
 | `miro-bridge-mcp config` | Adding another AI app. |
 | `miro-bridge-mcp uninstall` | Removes the login service, stops it, unregisters from Claude Code. Then `npm rm -g miro-bridge-mcp`. |
@@ -95,7 +94,7 @@ Tip: pin the app icon (left toolbar → **More apps** → star it) so it's one c
 |---|---|
 | "No Miro board connected" | Board closed, or the app isn't installed in *that board's* team. Open a board of the right team. Run `check`. |
 | Connected only after F5 | The background service isn't running (it starts at login). Run `setup` once. |
-| Right-click items missing | Board tab still runs the old app: reload once. `check` shows how many of the 3 actions registered. |
+| Board menu actions missing | Beta (Miro's experimental custom actions). `check` shows how many of the 3 registered and Miro's error. Use the app icon meanwhile. |
 | `capture` fails | Windows only; the Miro window must not be minimized (it may be covered). |
 | Brave never connects | Brave blocks localhost by default: Settings → Privacy → allow **Localhost access** for miro.com. |
 | Safari | Not supported (blocks the local connection). Use Chrome, Edge or the Miro desktop app. |

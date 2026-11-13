@@ -18,7 +18,15 @@ const byIds = (ids) => Promise.all(ids.map((id) => miro.board.getById(id)));
 async function addToFrame(item, parentId) {
   const frame = await miro.board.getById(parentId);
   if (frame.type !== 'frame') throw new Error(`parentId ${parentId} is a ${frame.type}, not a frame`);
-  await frame.add(item);
+  // Miro sometimes hasn't placed a just-created item yet ("isn't inside a parent frame"): retry briefly
+  for (let attempt = 1; ; attempt++) {
+    try { return await frame.add(item); } catch (err) {
+      if (attempt >= 4 || !/inside a parent frame/.test(err?.message)) {
+        throw new Error(`${err?.message || err}. Keep the board window visible (not minimized) while adding items to frames.`);
+      }
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+  }
 }
 
 const ops = {
@@ -43,11 +51,13 @@ const ops = {
   async update_items({ items }) {
     const out = [];
     for (const { id, props } of items) {
-      const item = await miro.board.getById(id);
-      const { style, ...rest } = props;
+      let item = await miro.board.getById(id);
+      const { style, parentId, ...rest } = props;
       Object.assign(item, rest);
       if (style) item.style = { ...item.style, ...style };
       await item.sync();
+      if (parentId) { await addToFrame(item, parentId); item = await miro.board.getById(id); } // move into a frame
+      if (parentId === null && item.parentId) { await (await miro.board.getById(item.parentId)).remove(item); item = await miro.board.getById(id); }
       out.push(item);
     }
     return out;
@@ -61,7 +71,7 @@ const ops = {
     return { deleted, alreadyGone: ids.length - deleted };
   },
   // focus = ids the user marked as "what we're talking about"; stored on the board so it survives reloads
-  get_app_status: () => ({ version: APP_VERSION, actions: registered }), // for `check`: which right-click actions registered
+  get_app_status: () => ({ version: APP_VERSION, actions: registered, actionErrors, actionsApi: Boolean(miro.board.experimental?.action?.register) }), // for `check`
   get_focus_ids: async () => (await miro.board.getAppData('focus')) || [],
   async set_focus({ ids }) {
     await miro.board.setAppData('focus', ids);
@@ -104,7 +114,7 @@ miro.board.ui.on('icon:click', async () => {
   miro.board.notifications.showInfo(had ? `AI focus cleared${note}` : `Select items, then click this icon to focus the AI on them${note}`);
 });
 
-// Right-click menu on selected items ("custom actions"). Miro rules: share-link apps only, max 4 actions,
+// Item-toolbar menu on selected items ("custom actions", experimental). Miro rules: share-link apps only, max 4 actions,
 // subscribe before register, register again on every load (actions live only while this headless app runs).
 // Icon names come from Miro's internal set with no published list, so each action tries a few and falls back.
 const ACTIONS = [
@@ -116,6 +126,7 @@ const ACTIONS = [
     icons: ['minus-circle', 'minus', 'cross'], next: (ids, cur) => cur.filter((id) => !ids.includes(id)) },
 ];
 const registered = {}; // event -> icon that worked; reported to the bridge for `check`
+const actionErrors = {}; // event -> last error, so `check` can say why instead of guessing
 async function registerActions() {
   const api = miro.board.experimental?.action;
   if (!api?.register) return console.warn('MiroBridgeMCP: custom actions not available on this board');
@@ -132,7 +143,7 @@ async function registerActions() {
           ui: { label: a.label, description: a.description, icon, position: ACTIONS.indexOf(a) + 1 } });
         registered[a.event] = icon;
         break;
-      } catch (err) { console.warn(`MiroBridgeMCP: action ${a.event} with icon ${icon} failed:`, err?.message || err); }
+      } catch (err) { actionErrors[a.event] = `${icon}: ${err?.message || err}`; }
     }
   }
 }

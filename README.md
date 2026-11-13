@@ -17,7 +17,7 @@ AI app(s) ⇄ MCP (stdio) ⇄ MiroBridgeMCP bridge on your machine (localhost:77
 ## Features
 
 - **Read cheaply** — `get_board_info` gives an overview in ~200 tokens; items come back compact (plain text, rounded geometry), ~70% smaller than raw SDK output.
-- **Focus** — big boards are full of old ideas. Select what matters, **right-click → Focus AI here**, and the AI starts from that. A hint, not a fence: the AI can still look elsewhere when the task needs it.
+- **Focus** — big boards are full of old ideas. Select what matters, click the **MiroBridgeMCP app icon**, and the AI starts from that. A hint, not a fence: the AI can still look elsewhere when the task needs it.
 - **Any MCP client, several at once** — Claude Code and Antigravity (or Cursor, ...) can be open together; they share one bridge.
 - **No reload dance** — a small background service keeps the bridge up, so boards connect whenever they open.
 - **Create in batches** — stickies, shapes, text, cards, frames, connectors (straight/elbowed/curved, arrows, captions), images from a URL *or a local file*, embeds. A failed batch is rolled back.
@@ -48,7 +48,7 @@ More prompts, real numbers and Miro quirks: **[docs/USAGE.md](docs/USAGE.md)**.
 | Command | Use |
 |---|---|
 | `miro-bridge-mcp setup` | install, repair, or finish an update |
-| `miro-bridge-mcp check` | OK/FAIL for service, login start, board, app version, right-click menu |
+| `miro-bridge-mcp check` | OK/FAIL for service, login start, board, app version, board menu |
 | `miro-bridge-mcp config` | config snippets for other AI apps |
 | `miro-bridge-mcp uninstall` | remove the login service and Claude Code entry (then `npm rm -g miro-bridge-mcp`) |
 
@@ -58,12 +58,13 @@ More prompts, real numbers and Miro quirks: **[docs/USAGE.md](docs/USAGE.md)**.
 
 | On the board | Effect |
 |---|---|
-| Select → right-click → **Focus AI here** | focus = these items |
-| Right-click → **Add to AI focus** / **Remove from AI focus** | grow / shrink it |
-| Select → click the app icon (left toolbar → More apps; star it to pin) | same as *Focus AI here*; nothing selected = clear |
+| Select → click the **app icon** (left toolbar → More apps; star it to pin) | focus = these items; nothing selected = clear |
+| Select → **Focus AI here** / **Add to AI focus** / **Remove from AI focus** in the item toolbar *(beta, see below)* | replace / grow / shrink the focus |
 
 Focusing a frame includes everything on it and the connectors between those items. The focus is saved in the board and shared by all AI apps.
 The AI can set it too: *"focus on the Act 2 frame"*.
+
+*Beta:* the item-toolbar actions use Miro's experimental "custom actions" API. On some boards Miro does not offer them yet; `miro-bridge-mcp check` shows whether they registered and why not. The app icon always works.
 
 ## Tools
 
@@ -90,7 +91,7 @@ Every tool carries an icon and MCP safety hints (`readOnlyHint` / `destructiveHi
 |---|---|
 | `No Miro board connected` | Is the app installed in *this board's* team? Is a board open? |
 | Connects only after F5 | The background service isn't running: run `miro-bridge-mcp setup` once. |
-| Right-click items missing | Reload the board tab once (it still runs an older app). |
+| Board menu actions missing | Beta feature: run `check` for the reason. Use the app icon meanwhile. |
 | Brave doesn't connect | Settings → Privacy → allow **Localhost access** for miro.com (or drop Shields on miro.com). |
 | `isn't inside a parent frame` | Keep the board window on screen while building inside frames. |
 | `capture` fails | Windows only; the Miro window must not be minimized (it can be behind other windows). |
@@ -112,7 +113,7 @@ scopes:
 ```
 In **Display information** upload `assets/miro-icon-outline.svg` (toolbar icon, one color) and `assets/miro-icon-colored.svg`.
 Share its **Installation URL** (app settings → Share app) and set `MIRO_BRIDGE_INSTALL_URL` to it, or fork and change it in `server.js`.
-Right-click actions only work for apps shared this way (not Marketplace apps). No client secret is needed — never commit one.
+Item-toolbar actions only work for apps shared this way (not Marketplace apps). No client secret is needed — never commit one.
 
 ## Security notes
 

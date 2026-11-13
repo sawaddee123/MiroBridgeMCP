@@ -239,7 +239,8 @@ tool('create_items',
   { items: z.array(z.object({ type: z.enum(['sticky_note', 'shape', 'text', 'card', 'app_card', 'frame', 'connector', 'image', 'embed']), props: z.record(z.any()) })).min(1) },
   async ({ items }) => (await call('create_items', { items: await Promise.all(items.map(withFile)) })).map(compact));
 tool('update_items',
-  'Update items: each entry is {id, props}; props are merged into the item (nested style is merged too) then synced. Returns updated items (compact).',
+  'Update items: each entry is {id, props}; props are merged into the item (nested style is merged too) then synced. ' +
+  'props.parentId: a frame id moves the item into that frame (it must lie inside the frame), null takes it out. Returns updated items (compact).',
   { items: z.array(z.object({ id: z.string(), props: z.record(z.any()) })).min(1) }, compactMany('update_items'));
 tool('arrange_items',
   'Auto-layout items into a tidy grid/row/column (uniform cells = largest item, gap between). Give ids (kept in that order) or parentId (all items in that frame, current reading order). ' +
@@ -407,13 +408,15 @@ async function check(defaultWait = 90) {
       'Brave: allow localhost access for miro.com. Safari is not supported.' : `board not answering: ${last?.message}`);
     process.exit(1);
   }
-  const items = await call('get_items');
-  say(true, `board connected: ${info.id} (${items.length} items)`);
+  const items = await call('get_items').catch(() => null); // the bridge may change hands mid-check; don't crash on it
+  say(true, `board connected: ${info.id}${items ? ` (${items.length} items)` : ''}`);
   const app = (await call('__status').catch(() => ({}))).appVersion;
   say(app === VERSION, app === VERSION ? `board app v${app} is current` : `board app is v${app ?? 'old'}, bridge is v${VERSION}: reload the board tab once`);
-  const actions = (await call('get_app_status').catch(() => null))?.actions ?? {};
-  const n = Object.keys(actions).length;
-  say(n === 3, n === 3 ? 'right-click menu ready (select items → right-click → "Focus AI here")' : `right-click menu: ${n}/3 actions registered (the app icon still works)`);
+  const st = await call('get_app_status').catch(() => null);
+  const n = Object.keys(st?.actions ?? {}).length;
+  say(n === 3, n === 3 ? 'board menu ready (select items → "Focus AI here" in the item toolbar)'
+    : `board menu: ${n}/3 actions registered (the app icon still works)${st && !st.actionsApi ? '; Miro offers no custom actions on this board' : ''}`);
+  for (const [ev, err] of Object.entries(st?.actionErrors ?? {})) console.log(`     ${ev} -> ${err}`);
   console.log('Ready: (re)start your AI app and ask it about the board.');
   process.exit(0);
 }

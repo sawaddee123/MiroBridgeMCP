@@ -32,9 +32,8 @@ another AI app ─stdio─> MiroBridgeMCP ─┤ (shares the first one)
 
 | วิธี | ผลที่ได้ |
 |---|---|
-| เลือก item → **คลิกขวา → Focus AI here** | Focus = item ที่เลือก (แทนที่ focus เดิม) |
-| คลิกขวา → **Add to AI focus** / **Remove from AI focus** | เพิ่มหรือลด focus |
-| เลือก item → คลิก **ไอคอนแอป** ในแถบเครื่องมือด้านซ้าย | เหมือน *Focus AI here* ถ้าไม่ได้เลือกอะไรจะเป็นการล้าง focus |
+| เลือก item → คลิก **ไอคอนแอป** ในแถบเครื่องมือด้านซ้าย | Focus = item ที่เลือก ถ้าไม่ได้เลือกอะไรจะเป็นการล้าง focus |
+| เลือก item → **Focus AI here** / **Add to AI focus** / **Remove from AI focus** ในแถบเครื่องมือของ item *(beta)* | แทนที่ / เพิ่ม / ลด focus |
 | บอก AI ว่า: *"โฟกัสที่เฟรม Act 2"* | AI จะเรียก `set_focus` |
 
 - การ focus **เฟรม** จะรวมทุกอย่างบนเฟรมนั้น รวมถึง item ที่วางทับอยู่แต่ไม่ได้ผูกกับเฟรม และ connector ระหว่าง item เหล่านั้นด้วย (วัดได้: 1 เฟรม → 48 item รวม connector 19 เส้น)
@@ -81,7 +80,7 @@ another AI app ─stdio─> MiroBridgeMCP ─┤ (shares the first one)
 
 | คำสั่ง | ใช้เมื่อ |
 |---|---|
-| `miro-bridge-mcp check` | รู้สึกว่ามีอะไรแปลกๆ จะแสดงสถานะ service, การเริ่มตอน login, บอร์ด, เวอร์ชันแอป และเมนูคลิกขวา แต่ละข้อเป็น OK/FAIL |
+| `miro-bridge-mcp check` | รู้สึกว่ามีอะไรแปลกๆ จะแสดงสถานะ service, การเริ่มตอน login, บอร์ด, เวอร์ชันแอป และเมนูบนบอร์ด แต่ละข้อเป็น OK/FAIL |
 | `miro-bridge-mcp setup` | หลังอัปเดต หรือเมื่อต้องการซ่อม รันซ้ำได้อย่างปลอดภัย: รีสตาร์ท service ตัวเก่า ลงทะเบียนใหม่ และข้ามหน้าติดตั้งถ้ามีบอร์ดเชื่อมต่ออยู่แล้ว |
 | `miro-bridge-mcp config` | เพิ่มแอป AI ตัวอื่น |
 | `miro-bridge-mcp uninstall` | ลบ service ที่เริ่มตอน login หยุดการทำงาน และยกเลิกการลงทะเบียนกับ Claude Code จากนั้นรัน `npm rm -g miro-bridge-mcp` |
@@ -96,7 +95,7 @@ another AI app ─stdio─> MiroBridgeMCP ─┤ (shares the first one)
 |---|---|
 | "No Miro board connected" | บอร์ดถูกปิด หรือยังไม่ได้ติดตั้งแอปในทีม*ของบอร์ดนั้น* ให้เปิดบอร์ดของทีมที่ถูกต้อง แล้วรัน `check` |
 | เชื่อมต่อได้ก็ต่อเมื่อกด F5 | background service ไม่ได้รันอยู่ (ปกติจะเริ่มตอน login) ให้รัน `setup` หนึ่งครั้ง |
-| เมนูคลิกขวาไม่ขึ้น | แท็บบอร์ดยังรันแอปตัวเก่า: รีโหลดหนึ่งครั้ง `check` จะบอกว่าลงทะเบียนไปแล้วกี่ action จาก 3 |
+| เมนูในแถบเครื่องมือไม่ขึ้น | ฟีเจอร์ beta (custom actions ของ Miro ยังเป็น experimental) `check` จะบอกว่าลงทะเบียนได้กี่อันและ error จาก Miro ระหว่างนี้ใช้ไอคอนแอปแทน |
 | `capture` ล้มเหลว | ใช้ได้แค่บน Windows และหน้าต่าง Miro ต้องไม่ถูกย่อ (มีหน้าต่างอื่นบังได้) |
 | Brave เชื่อมต่อไม่ได้เลย | Brave บล็อก localhost เป็นค่าเริ่มต้น: Settings → Privacy → อนุญาต **Localhost access** ให้ miro.com |
 | Safari | ไม่รองรับ (บล็อกการเชื่อมต่อในเครื่อง) ให้ใช้ Chrome, Edge หรือ Miro desktop app |
