@@ -61,6 +61,7 @@ const ops = {
     return { deleted, alreadyGone: ids.length - deleted };
   },
   // focus = ids the user marked as "what we're talking about"; stored on the board so it survives reloads
+  get_app_status: () => ({ version: APP_VERSION, actions: registered }), // for `check`: which right-click actions registered
   get_focus_ids: async () => (await miro.board.getAppData('focus')) || [],
   async set_focus({ ids }) {
     await miro.board.setAppData('focus', ids);
@@ -72,11 +73,12 @@ const ops = {
   },
 };
 
+const APP_VERSION = '__VERSION__'; // filled in by the bridge when it serves this page
 let connected = false;
 function connect() {
   const ws = new WebSocket(`ws://${location.host}`);
-  ws.onopen = () => { connected = true; };
-  ws.onclose = () => { connected = false; setTimeout(connect, 2000); }; // server restarts with each Claude session
+  ws.onopen = () => { connected = true; ws.send(JSON.stringify({ hello: APP_VERSION })); };
+  ws.onclose = () => { connected = false; setTimeout(connect, 2000); }; // server restarts with each AI app session
   ws.onmessage = async (e) => {
     const { id, op, params } = JSON.parse(e.data);
     try {
@@ -91,16 +93,50 @@ if (window.top !== window.self) connect(); // only inside Miro's iframe; a plain
 
 // icon click: selection -> set focus; nothing selected -> clear focus. Also reports connection status.
 miro.board.ui.on('icon:click', async () => {
-  const note = connected ? '' : ' (Claude not connected yet)';
+  const note = connected ? '' : ' (no AI app connected yet)';
   const sel = await miro.board.getSelection();
   if (sel.length) {
     await miro.board.setAppData('focus', sel.map((i) => i.id));
-    return miro.board.notifications.showInfo(`Claude focus: ${sel.length} item(s)${note}`);
+    return miro.board.notifications.showInfo(`AI focus: ${sel.length} item(s)${note}`);
   }
   const had = ((await miro.board.getAppData('focus')) || []).length;
   await miro.board.setAppData('focus', []);
-  miro.board.notifications.showInfo(had ? `Claude focus cleared${note}` : `Select items, then click this icon to focus Claude on them${note}`);
+  miro.board.notifications.showInfo(had ? `AI focus cleared${note}` : `Select items, then click this icon to focus the AI on them${note}`);
 });
+
+// Right-click menu on selected items ("custom actions"). Miro rules: share-link apps only, max 4 actions,
+// subscribe before register, register again on every load (actions live only while this headless app runs).
+// Icon names come from Miro's internal set with no published list, so each action tries a few and falls back.
+const ACTIONS = [
+  { event: 'ai-focus', label: 'Focus AI here', description: 'The AI starts from these items (replaces the focus)',
+    icons: ['target', 'magic', 'star'], next: (ids) => ids },
+  { event: 'ai-focus-add', label: 'Add to AI focus', description: 'Keep the current AI focus and add these items',
+    icons: ['plus-circle', 'plus', 'add'], next: (ids, cur) => [...new Set([...cur, ...ids])] },
+  { event: 'ai-focus-remove', label: 'Remove from AI focus', description: 'Take these items out of the AI focus',
+    icons: ['minus-circle', 'minus', 'cross'], next: (ids, cur) => cur.filter((id) => !ids.includes(id)) },
+];
+const registered = {}; // event -> icon that worked; reported to the bridge for `check`
+async function registerActions() {
+  const api = miro.board.experimental?.action;
+  if (!api?.register) return console.warn('MiroBridgeMCP: custom actions not available on this board');
+  for (const a of ACTIONS) {
+    await miro.board.ui.on(`custom:${a.event}`, async ({ items }) => {
+      const cur = (await miro.board.getAppData('focus')) || [];
+      const focus = a.next(items.map((i) => i.id), cur);
+      await miro.board.setAppData('focus', focus);
+      miro.board.notifications.showInfo(focus.length ? `AI focus: ${focus.length} item(s)` : 'AI focus cleared');
+    });
+    for (const icon of [...a.icons, 'chat-two']) { // chat-two is used in Miro's own example, so it is known to exist
+      try {
+        await api.register({ event: a.event, scope: 'local', selection: 'multi', contexts: { item: {} },
+          ui: { label: a.label, description: a.description, icon, position: ACTIONS.indexOf(a) + 1 } });
+        registered[a.event] = icon;
+        break;
+      } catch (err) { console.warn(`MiroBridgeMCP: action ${a.event} with icon ${icon} failed:`, err?.message || err); }
+    }
+  }
+}
+registerActions();
 </script>
 </body>
 </html>

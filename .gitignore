@@ -1,3 +1,23 @@
+# dependencies
 node_modules/
-*.png
+
+# npm pack output, logs
+*.tgz
+*.log
+npm-debug.log*
+
+# demo recording scratch (docs/demo.gif itself is committed)
 docs/frames/
+*.png
+
+# secrets: never commit Miro client secrets or tokens
+.env
+.env.*
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp

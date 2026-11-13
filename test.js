@@ -8,6 +8,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const PORT = 7799;
+const VERSION = JSON.parse((await import('node:fs')).readFileSync('package.json', 'utf8')).version;
 const client = new Client({ name: 'test', version: '0' });
 await client.connect(new StdioClientTransport({ command: 'node', args: ['server.js'], env: { ...process.env, MIRO_BRIDGE_PORT: String(PORT) }, stderr: 'ignore' }));
 await new Promise((r) => setTimeout(r, 300));
@@ -32,6 +33,8 @@ const RAW = [
   { id: 'f1', type: 'frame', title: 'Retro', x: 0.4, y: 0, width: 800, height: 600, childrenIds: ['s1'], style: { fillColor: '#ffffff' }, createdAt: 't', createdBy: 'u' },
   { id: 's1', type: 'sticky_note', content: '<p>Flaky &amp; slow</p>', x: 200.2, y: 220, width: 199, height: 228, parentId: 'f1', style: { fillColor: 'light_pink', textAlign: 'center' }, modifiedAt: 't', connectorIds: [], relativeTo: 'parent_top_left' },
   { id: 'c1', type: 'connector', shape: 'curved', start: { item: 's1', position: {} }, end: { item: 'f1' }, style: { strokeColor: '#000' }, captions: [{ content: '<p>fix</p>', position: 0.5 }] },
+  { id: 'o1', type: 'text', content: 'on frame, not parented', x: 100, y: 100, width: 10, height: 10 },
+  { id: 'far', type: 'text', content: 'elsewhere', x: 5000, y: 0, width: 10, height: 10 },
 ];
 const EXTRA = [{ id: 's2', type: 'sticky_note', content: 'b', x: 600, y: 100, width: 100, height: 100, parentId: 'f1' }, { id: 'loose', type: 'text', x: 0, y: 0, width: 10, height: 10 }];
 let lastParams;
@@ -51,13 +54,26 @@ fake.on('message', (raw) => {
 await new Promise((res) => fake.on('open', res));
 const json = (r) => JSON.parse(r.content[0].text);
 
+// a board running an old app gets a reload warning; the real app says hello with its version
 r = await client.callTool({ name: 'get_board_info', arguments: {} });
-assert.deepEqual(json(r), { id: 'b1', counts: { frame: 1, sticky_note: 1, connector: 1 }, frames: [{ id: 'f1', title: 'Retro', children: 1 }], focus: 'none' });
+assert.match(json(r).warning, /reload the board tab/);
+fake.send(JSON.stringify({ hello: VERSION }));
+await new Promise((res) => setTimeout(res, 100));
+
+// tools carry icons (spec 2025-11) and safety hints; the server carries its icon
+const listed = (await client.listTools()).tools;
+assert.ok(listed.every((x) => x.icons?.[0]?.src.startsWith('data:image/svg+xml;base64,')), 'every tool has an icon');
+assert.equal(listed.find((x) => x.name === 'get_items').annotations.readOnlyHint, true);
+assert.equal(listed.find((x) => x.name === 'delete_items').annotations.destructiveHint, true);
+assert.ok(client.getServerVersion().icons?.length, 'server icon');
+
+r = await client.callTool({ name: 'get_board_info', arguments: {} });
+assert.deepEqual(json(r), { id: 'b1', counts: { frame: 1, sticky_note: 1, connector: 1, text: 2 }, frames: [{ id: 'f1', title: 'Retro', children: 1 }], focus: 'none' });
 
 // focus: a focused frame brings its children; overview tells Claude a focus exists
 assert.deepEqual(json(await client.callTool({ name: 'get_focus', arguments: {} })), []);
 await client.callTool({ name: 'set_focus', arguments: { ids: ['f1'] } });
-assert.deepEqual(json(await client.callTool({ name: 'get_focus', arguments: {} })).map((i) => i.id), ['f1', 's1']);
+assert.deepEqual(json(await client.callTool({ name: 'get_focus', arguments: {} })).map((i) => i.id), ['f1', 's1', 'c1', 'o1'], 'frame focus = children + loose items on it + connectors between them');
 assert.match(json(await client.callTool({ name: 'get_board_info', arguments: {} })).focus, /1 item/);
 await client.callTool({ name: 'set_focus', arguments: { ids: [] } });
 
@@ -105,8 +121,29 @@ await new Promise((r) => setTimeout(r, 100));
 r = await client.callTool({ name: 'get_selection', arguments: {} });
 assert.equal(json(r)[0].id, 'f1', 'falls back to older tab');
 
+// a browser page cannot pose as another AI app on /peer (browsers always send Origin)
+const fakePeer = new WebSocket(`ws://localhost:${PORT}/peer`, { origin: `http://localhost:${PORT}` });
+await new Promise((res) => { fakePeer.on('error', res); fakePeer.on('open', () => assert.fail('browser accepted as peer')); });
+
+// a second AI app on the same port shares the first one's bridge...
+const client2 = new Client({ name: 'test2', version: '0' });
+await client2.connect(new StdioClientTransport({ command: 'node', args: ['server.js'], env: { ...process.env, MIRO_BRIDGE_PORT: String(PORT) }, stderr: 'ignore' }));
+await new Promise((r) => setTimeout(r, 500));
+r = await client2.callTool({ name: 'get_selection', arguments: {} });
+assert.equal(json(r)[0].id, 'f1', 'second app reaches the board through the first');
+
 fake.close();
 await client.close();
+
+// ...and takes over the port when the first app exits
+await new Promise((r) => setTimeout(r, 2500));
+const fake2 = new WebSocket(`ws://localhost:${PORT}`, { origin: `http://localhost:${PORT}` });
+fake2.on('message', (raw) => fake2.send(JSON.stringify({ id: JSON.parse(raw).id, result: [{ id: 'z', type: 'text' }] })));
+await new Promise((res) => fake2.on('open', res));
+r = await client2.callTool({ name: 'get_selection', arguments: {} });
+assert.equal(json(r)[0].id, 'z', 'second app took over the port');
+fake2.close();
+await client2.close();
 
 // --check: passes once a board connects and answers
 const { spawn } = await import('node:child_process');
@@ -117,11 +154,35 @@ const b = new WebSocket(`ws://localhost:${PORT + 1}`, { origin: `http://localhos
 b.on('message', (raw) => { const { id, op } = JSON.parse(raw); b.send(JSON.stringify({ id, result: op === 'get_items' ? RAW : { id: 'b1' } })); });
 const code = await new Promise((r) => chk.on('exit', r));
 assert.equal(code, 0, out);
-assert.ok(out.includes('board connected: b1 (3 items)'), out);
+assert.ok(out.includes('board connected: b1 (5 items)'), out);
 b.close();
 
 // setup (dry run): registers node + this server.js's absolute path, never npx
 const dry = (await import('node:child_process')).execFileSync('node', ['server.js', 'setup'], { env: { ...process.env, MIRO_BRIDGE_DRY_RUN: '1', MIRO_BRIDGE_PORT: String(PORT + 2) } }).toString();
 assert.match(dry, /DRY {2}claude mcp add MiroBridgeMCP -s user -- node ".*\/server\.js"/, dry);
 assert.ok(dry.includes('miro.com/app-install'), dry);
+
+// config: one snippet per client family, all pointing at this server.js
+const cfg = (await import('node:child_process')).execFileSync('node', ['server.js', 'config'], { env: { ...process.env, MIRO_BRIDGE_PORT: String(PORT + 3) } }).toString();
+for (const s of ['claude mcp add MiroBridgeMCP', '"mcpServers"', '"servers"', '[mcp_servers.MiroBridgeMCP]']) assert.ok(cfg.includes(s), `config lacks ${s}`);
+assert.ok(/"args": \[\s*".*\/server\.js"\s*\]/.test(cfg), cfg);
+// serve: background service owns the port, answers status through a peer, exits when asked
+const { spawn: sp } = await import('node:child_process');
+const SVC = PORT + 4;
+const svc = sp('node', ['server.js', 'serve'], { env: { ...process.env, MIRO_BRIDGE_PORT: String(SVC) }, stdio: 'ignore' });
+await new Promise((res) => setTimeout(res, 800));
+const peer = new WebSocket(`ws://127.0.0.1:${SVC}/peer`);
+await new Promise((res) => peer.on('open', res));
+const ask = (op) => new Promise((res) => { const id = op; peer.once('message', (m) => res(JSON.parse(m))); peer.send(JSON.stringify({ id, op, params: {} })); });
+const st = await ask('__status');
+assert.equal(st.result.mode, 'serve');
+assert.equal(st.result.version, VERSION);
+assert.deepEqual((await ask('__shutdown')).result, { stopping: true });
+assert.equal(await new Promise((res) => svc.on('exit', res)), 0, 'service exits on request');
+peer.close();
+
+// unknown commands fail clearly instead of silently starting an MCP server
+const bad = (await import('node:child_process')).spawnSync('node', ['server.js', 'setpu'], { env: { ...process.env, MIRO_BRIDGE_PORT: String(PORT + 5) } });
+assert.equal(bad.status, 1);
+assert.match(String(bad.stdout), /Unknown command "setpu"/);
 console.log('ok: all checks passed');

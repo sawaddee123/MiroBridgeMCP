@@ -1,6 +1,6 @@
 {
   "name": "miro-bridge-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "MCP server that lets Claude read and edit a live Miro board through a Web SDK app (no REST API, no daily quota)",
@@ -18,11 +18,16 @@
   },
   "files": [
     "server.js",
+    "service.js",
+    "icons.js",
     "app/",
+    "assets/",
     "capture.ps1",
     "README.md",
     "README.th.md",
-    "LICENSE"
+    "docs/USAGE.md",
+    "LICENSE",
+    "docs/USAGE.th.md"
   ],
   "engines": {
     "node": ">=20"
