@@ -27,7 +27,9 @@ $apps = 'Miro', 'chrome', 'brave', 'msedge', 'firefox', 'opera', 'vivaldi', 'arc
   if (-not [W]::IsWindowVisible($h) -or $sb.ToString() -notlike "*$Title*") { return $true }
   $procId = 0; [W]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null
   $proc = (Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName
-  if ($apps -contains $proc) { $script:hit = $h; $script:name = "$($sb.ToString()) [$proc]"; return $false }
+  if (-not ($apps -contains $proc) -or $sb.ToString() -like '*MiroBridgeMCP*') { return $true } # skip this project's own GitHub page
+  if ($proc -eq 'Miro') { $script:hit = $h; $script:name = "$($sb.ToString()) [$proc]"; return $false } # desktop app wins
+  if (-not $script:hit) { $script:hit = $h; $script:name = "$($sb.ToString()) [$proc]" } # else topmost browser tab
   return $true }, [IntPtr]::Zero) | Out-Null
 if (-not $script:hit) { throw "No visible window with '$Title' in its title. Open the Miro board as the active tab." }
 if ([W]::IsIconic($script:hit)) { throw "The Miro window is minimized. Restore it (it can stay behind other windows)." }

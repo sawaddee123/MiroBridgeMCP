@@ -21,3 +21,13 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# raw demo recordings (edited result goes in docs/)
+docs/raw/
+
+# screen recordings + Resolve interchange scratch (scripts/record_window.py, editing)
+*.mp4
+!docs/*.mp4
+*.otio
+*.edl
+__pycache__/
