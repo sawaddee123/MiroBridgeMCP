@@ -1,0 +1,42 @@
+{
+  "name": "miro-bridge-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server that lets Claude read and edit a live Miro board through a Web SDK app (no REST API, no daily quota)",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "ws": "8.23.0",
+    "zod": "^3.25.0"
+  },
+  "bin": {
+    "miro-bridge-mcp": "server.js"
+  },
+  "files": [
+    "server.js",
+    "app/",
+    "capture.ps1",
+    "README.md",
+    "README.th.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "miro",
+    "claude",
+    "model-context-protocol",
+    "whiteboard"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sawaddee123/MiroBridgeMCP.git"
+  }
+}

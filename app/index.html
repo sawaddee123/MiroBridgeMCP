@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MiroBridgeMCP</title>
+  <script src="https://miro.com/app/static/sdk/v2/miro.js"></script>
+</head>
+<body>
+<script>
+// Headless Miro app: Miro loads this page in a hidden iframe whenever a board with the app is open.
+const CREATE = {
+  sticky_note: 'createStickyNote', shape: 'createShape', text: 'createText', card: 'createCard',
+  app_card: 'createAppCard', frame: 'createFrame', connector: 'createConnector', image: 'createImage', embed: 'createEmbed',
+};
+const plain = (x) => JSON.parse(JSON.stringify(x)); // SDK items are class instances
+const byIds = (ids) => Promise.all(ids.map((id) => miro.board.getById(id)));
+
+async function addToFrame(item, parentId) {
+  const frame = await miro.board.getById(parentId);
+  if (frame.type !== 'frame') throw new Error(`parentId ${parentId} is a ${frame.type}, not a frame`);
+  await frame.add(item);
+}
+
+const ops = {
+  get_board_info: () => miro.board.getInfo(),
+  get_items: ({ type, ids }) => miro.board.get({ ...(type && { type }), ...(ids && { id: ids }) }),
+  get_selection: () => miro.board.getSelection(),
+  async create_items({ items }) {
+    const out = [];
+    try {
+      for (const { type, props } of items) {
+        const { parentId, ...rest } = props;
+        const item = await miro.board[CREATE[type]](rest);
+        out.push(item);
+        if (parentId) await addToFrame(item, parentId);
+      }
+    } catch (err) { // all-or-nothing: don't leave half a batch on someone's board
+      for (const item of out) await miro.board.remove(item).catch(() => {});
+      throw new Error(`${err?.message || err} (rolled back ${out.length} item(s) from this call)`);
+    }
+    return out;
+  },
+  async update_items({ items }) {
+    const out = [];
+    for (const { id, props } of items) {
+      const item = await miro.board.getById(id);
+      const { style, ...rest } = props;
+      Object.assign(item, rest);
+      if (style) item.style = { ...item.style, ...style };
+      await item.sync();
+      out.push(item);
+    }
+    return out;
+  },
+  async delete_items({ ids }) {
+    let deleted = 0;
+    for (const id of ids) {
+      const [item] = await miro.board.get({ id }); // [] if already gone: removing a shape also removes its connectors
+      if (item) { await miro.board.remove(item); deleted++; }
+    }
+    return { deleted, alreadyGone: ids.length - deleted };
+  },
+  // focus = ids the user marked as "what we're talking about"; stored on the board so it survives reloads
+  get_focus_ids: async () => (await miro.board.getAppData('focus')) || [],
+  async set_focus({ ids }) {
+    await miro.board.setAppData('focus', ids);
+    return { focus: ids.length };
+  },
+  async zoom_to({ ids }) {
+    await miro.board.viewport.zoomTo(await byIds(ids));
+    return { ok: true };
+  },
+};
+
+let connected = false;
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen = () => { connected = true; };
+  ws.onclose = () => { connected = false; setTimeout(connect, 2000); }; // server restarts with each Claude session
+  ws.onmessage = async (e) => {
+    const { id, op, params } = JSON.parse(e.data);
+    try {
+      if (!ops[op]) throw new Error(`Unknown op ${op}`);
+      ws.send(JSON.stringify({ id, result: plain(await ops[op](params)) }));
+    } catch (err) {
+      ws.send(JSON.stringify({ id, error: err?.message || String(err) }));
+    }
+  };
+}
+if (window.top !== window.self) connect(); // only inside Miro's iframe; a plain localhost tab has no board
+
+// icon click: selection -> set focus; nothing selected -> clear focus. Also reports connection status.
+miro.board.ui.on('icon:click', async () => {
+  const note = connected ? '' : ' (Claude not connected yet)';
+  const sel = await miro.board.getSelection();
+  if (sel.length) {
+    await miro.board.setAppData('focus', sel.map((i) => i.id));
+    return miro.board.notifications.showInfo(`Claude focus: ${sel.length} item(s)${note}`);
+  }
+  const had = ((await miro.board.getAppData('focus')) || []).length;
+  await miro.board.setAppData('focus', []);
+  miro.board.notifications.showInfo(had ? `Claude focus cleared${note}` : `Select items, then click this icon to focus Claude on them${note}`);
+});
+</script>
+</body>
+</html>
