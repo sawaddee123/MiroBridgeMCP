@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="MiroBridgeMCP">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <rect width="64" height="64" rx="14" fill="#3b2f8f"/>
   <rect x="9" y="12" width="46" height="34" rx="5" fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="2.5"/>
   <path d="M16 38 C 22 22, 42 22, 48 38" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
