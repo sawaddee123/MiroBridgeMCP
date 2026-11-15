@@ -41,11 +41,15 @@ $g = [System.Drawing.Graphics]::FromImage($bmp)
 $dc = $g.GetHdc()
 [W]::PrintWindow($script:hit, $dc, 2) | Out-Null # 2 = PW_RENDERFULLCONTENT, needed for Chromium
 $g.ReleaseHdc($dc); $g.Dispose()
-if ($w -gt $MaxWidth) { # downscale: fewer image tokens for Claude
-  $s = New-Object System.Drawing.Bitmap $MaxWidth, ([int]($h * $MaxWidth / $w))
+# Fit MaxWidth AND Claude's image limits (long edge 1568, ~1.15 MP); anything bigger gets re-shrunk client-side and turns blurry.
+$k = [Math]::Min([Math]::Min(1.0, $MaxWidth / $w), [Math]::Min(1568 / [Math]::Max($w, $h), [Math]::Sqrt(1150000 / ($w * $h))))
+if ($k -lt 1) {
+  $s = New-Object System.Drawing.Bitmap ([int]($w * $k)), ([int]($h * $k)), ([System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
   $g2 = [System.Drawing.Graphics]::FromImage($s)
-  $g2.InterpolationMode = 'HighQualityBicubic'
-  $g2.DrawImage($bmp, 0, 0, $s.Width, $s.Height); $g2.Dispose(); $bmp.Dispose(); $bmp = $s
+  $g2.InterpolationMode = 'HighQualityBicubic'; $g2.PixelOffsetMode = 'HighQuality'; $g2.CompositingQuality = 'HighQuality'
+  $ia = New-Object System.Drawing.Imaging.ImageAttributes; $ia.SetWrapMode('TileFlipXY') # no faded/transparent edge pixels
+  $g2.DrawImage($bmp, (New-Object System.Drawing.Rectangle 0, 0, $s.Width, $s.Height), 0, 0, $w, $h, 'Pixel', $ia)
+  $g2.Dispose(); $bmp.Dispose(); $bmp = $s
 }
 $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
 Write-Output "$($bmp.Width)x$($bmp.Height) $($script:name)"

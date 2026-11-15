@@ -2,10 +2,10 @@
 
 Usage: python scripts/record_window.py OUT.mp4 [--fps 20] [--title Miro] [--stop STOPFILE] [--max 300]
 Stops when STOPFILE exists (or after --max seconds). Writes OUT.mp4 plus OUT.json with the real capture fps.
-Windows only. Needs: numpy, opencv-python.
+Windows only. Needs: numpy, ffmpeg (with libx264) on PATH.
 """
-import argparse, ctypes, ctypes.wintypes as wt, json, os, time
-import numpy as np, cv2
+import argparse, ctypes, ctypes.wintypes as wt, json, os, subprocess, time
+import numpy as np
 
 user32, gdi32, kernel32 = ctypes.windll.user32, ctypes.windll.gdi32, ctypes.windll.kernel32
 user32.SetProcessDPIAware()  # real pixels on scaled displays
@@ -79,19 +79,24 @@ def main():
         raise SystemExit(f"no visible Miro window (title contains {a.title!r})")
     r = wt.RECT(); user32.GetWindowRect(hwnd, ctypes.byref(r))
     w, h = (r.right - r.left) // 2 * 2, (r.bottom - r.top) // 2 * 2
-    vw = cv2.VideoWriter(a.out, cv2.VideoWriter_fourcc(*"mp4v"), a.fps, (w, h))
+    # H.264 at CRF 18 keeps screen text sharp; OpenCV's "mp4v" has no quality setting and came out blocky
+    vw = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+                           "-r", str(a.fps), "-i", "-", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", a.out],
+                          stdin=subprocess.PIPE)
     start, n, period = time.perf_counter(), 0, 1 / a.fps
     frame = grab(hwnd, w, h)
     while time.perf_counter() - start < a.max and not (a.stop and os.path.exists(a.stop)):
         due = start + n * period
         now = time.perf_counter()
         if now >= due:  # write one frame per slot; repeat the last grab if capture fell behind (keeps real time)
-            vw.write(frame); n += 1
+            vw.stdin.write(np.ascontiguousarray(frame).tobytes()); n += 1
             if now - due < period:
                 frame = grab(hwnd, w, h)
         else:
             time.sleep(due - now)
-    vw.release()
+    vw.stdin.close()
+    if vw.wait():
+        raise SystemExit(f"ffmpeg failed (exit {vw.returncode})")
     json.dump({"fps": a.fps, "frames": n, "seconds": round(time.perf_counter() - start, 2), "size": [w, h], "start_epoch": time.time() - (time.perf_counter() - start)},
               open(os.path.splitext(a.out)[0] + ".json", "w"))
     print(f"wrote {a.out}: {n} frames, {w}x{h}")
