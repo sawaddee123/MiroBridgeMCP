@@ -24,7 +24,8 @@ AI app(s) ⇄ MCP (stdio) ⇄ MiroBridgeMCP bridge on your machine (localhost:77
 - **Any MCP client, several at once** — Claude Code and Antigravity (or Cursor, ...) can be open together; they share one bridge.
 - **No reload dance** — a small background service keeps the bridge up, so boards connect whenever they open.
 - **Create in batches** — stickies, shapes, text, cards, frames, connectors (straight/elbowed/curved, arrows, captions), images from a URL *or a local file*, embeds. A failed batch is rolled back.
-- **Layout** — `arrange_items` lays items out as a grid, row or column.
+- **Layout** — `arrange_items` lays items out as a grid, row or column; `group_items` and `reorder_items` (front/back).
+- **Tables and drawings** — Miro tables and pen strokes cannot be read or created through the Web SDK. The AI sees them with `capture`, draws tables with `create_table` (grouped shapes) and drawings as SVG images.
 - **See the result** — `capture` screenshots the Miro window so the AI can check its own work (Windows).
 
 ## Quick start (≈3 minutes, once)
@@ -82,6 +83,9 @@ The AI can set it too: *"focus on the Act 2 frame"*.
 | `delete_items` | Delete by id (connectors removed with their shape count as `alreadyGone`). |
 | `arrange_items` | Grid / row / column layout. |
 | `zoom_to` | Move the viewport to items. |
+| `group_items` | Group items, or ungroup a group. |
+| `reorder_items` | Bring to front / send to back. |
+| `create_table` | Draw a table as a grid of shapes (native Miro tables are not in the SDK). |
 | `capture` | Screenshot of the Miro window (Windows only). |
 
 Every tool carries an icon and MCP safety hints (`readOnlyHint` / `destructiveHint`), so clients can auto-approve reads and ask before deletes.
@@ -96,7 +100,7 @@ Every tool carries an icon and MCP safety hints (`readOnlyHint` / `destructiveHi
 | Connects only after F5 | The background service isn't running: run `miro-bridge-mcp setup` once. |
 | Board menu actions missing | Beta feature: run `check` for the reason. Use the app icon meanwhile. |
 | Brave doesn't connect | Settings → Privacy → allow **Localhost access** for miro.com (or drop Shields on miro.com). |
-| `isn't inside a parent frame` | Keep the board window on screen while building inside frames. |
+| `isn't inside a parent frame` | Miro stops rendering a covered window; on Windows the bridge now brings it to the front (without focus) and retries. Elsewhere, keep it on screen. |
 | `capture` fails | Windows only; the Miro window must not be minimized (it can be behind other windows). |
 | `port 7788 is used by another program` | Set `MIRO_BRIDGE_PORT` and the app URL to a free port. |
 | Safari | Not supported (blocks localhost). Use Chrome, Edge or the Miro desktop app. |

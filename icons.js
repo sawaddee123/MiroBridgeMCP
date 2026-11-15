@@ -19,5 +19,8 @@ export const TOOL_ICONS = {
   delete_items: glyph('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>', '#c0392b'),
   arrange_items: glyph('<rect x="3" y="3" width="5" height="5" rx="1"/><rect x="10" y="3" width="5" height="5" rx="1"/><rect x="17" y="3" width="4" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="10" y="12" width="5" height="5" rx="1"/><path d="M3 21h18"/>'),
   zoom_to: glyph('<circle cx="10.5" cy="10.5" r="7"/><path d="M21 21l-5.5-5.5M10.5 7.5v6M7.5 10.5h6"/>'),
+  group_items: glyph('<rect x="2" y="2" width="20" height="20" rx="2" stroke-dasharray="3 3"/><rect x="6" y="6" width="6" height="6" rx="1"/><circle cx="16" cy="16" r="3"/>'),
+  reorder_items: glyph('<rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1" fill="#5b4fd6"/>'),
+  create_table: glyph('<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 14.5h18M9 4v16M15 4v16"/>', '#1f9d6b'),
   capture: glyph('<path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/>'),
 };

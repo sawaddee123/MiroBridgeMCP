@@ -1,6 +1,7 @@
 # Screenshot of the browser window showing a Miro board (PrintWindow works even if the window is covered).
 # shortcut: Windows only; picks the topmost visible Miro-app/browser window whose title contains "Miro".
-param([string]$Out, [int]$MaxWidth = 1400, [string]$Title = 'Miro')
+# -Raise: bring that window to the front WITHOUT focus (Miro stops rendering covered windows), no screenshot.
+param([string]$Out, [int]$MaxWidth = 1400, [string]$Title = 'Miro', [switch]$Raise)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -15,6 +16,8 @@ public static class W {
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
   public struct RECT { public int L, T, R, B; }
 }
 '@
@@ -32,6 +35,13 @@ $apps = 'Miro', 'chrome', 'brave', 'msedge', 'firefox', 'opera', 'vivaldi', 'arc
   if (-not $script:hit) { $script:hit = $h; $script:name = "$($sb.ToString()) [$proc]" } # else topmost browser tab
   return $true }, [IntPtr]::Zero) | Out-Null
 if (-not $script:hit) { throw "No visible window with '$Title' in its title. Open the Miro board as the active tab." }
+if ($Raise) {
+  if ([W]::IsIconic($script:hit)) { [W]::ShowWindow($script:hit, 4) | Out-Null } # 4 = SW_SHOWNOACTIVATE
+  # topmost then back to normal = on top of the stack, keyboard focus stays where the user is (0x13 = NOSIZE|NOMOVE|NOACTIVATE)
+  [W]::SetWindowPos($script:hit, [IntPtr](-1), 0, 0, 0, 0, 0x13) | Out-Null
+  [W]::SetWindowPos($script:hit, [IntPtr](-2), 0, 0, 0, 0, 0x13) | Out-Null
+  Write-Output "raised $($script:name)"; exit 0
+}
 if ([W]::IsIconic($script:hit)) { throw "The Miro window is minimized. Restore it (it can stay behind other windows)." }
 $r = New-Object W+RECT
 [W]::GetWindowRect($script:hit, [ref]$r) | Out-Null

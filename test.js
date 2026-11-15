@@ -14,7 +14,7 @@ await client.connect(new StdioClientTransport({ command: 'node', args: ['server.
 await new Promise((r) => setTimeout(r, 300));
 
 const tools = (await client.listTools()).tools.map((t) => t.name);
-assert.deepEqual(tools.sort(), ['arrange_items', 'capture', 'create_items', 'delete_items', 'get_board_info', 'get_focus', 'get_items', 'get_selection', 'set_focus', 'update_items', 'zoom_to']);
+assert.deepEqual(tools.sort(), ['arrange_items', 'capture', 'create_items', 'create_table', 'delete_items', 'get_board_info', 'get_focus', 'get_items', 'get_selection', 'group_items', 'reorder_items', 'set_focus', 'update_items', 'zoom_to']);
 
 let r = await client.callTool({ name: 'get_board_info', arguments: {} });
 assert.ok(r.isError && /No Miro board connected/.test(r.content[0].text), 'errors when no board');
@@ -36,18 +36,23 @@ const RAW = [
   { id: 'o1', type: 'text', content: 'on frame, not parented', x: 100, y: 100, width: 10, height: 10 },
   { id: 'far', type: 'text', content: 'elsewhere', x: 5000, y: 0, width: 10, height: 10 },
 ];
-const EXTRA = [{ id: 's2', type: 'sticky_note', content: 'b', x: 600, y: 100, width: 100, height: 100, parentId: 'f1' }, { id: 'loose', type: 'text', x: 0, y: 0, width: 10, height: 10 }];
-let lastParams;
+const EXTRA = [{ id: 's2', type: 'sticky_note', content: 'b', x: 600, y: 100, width: 100, height: 100, parentId: 'f1' }, { id: 'loose', type: 'text', x: 0, y: 0, width: 10, height: 10 },
+  { id: 't1', type: 'unsupported', x: 0, y: 0, width: 900, height: 300 }];
+let lastParams, lastCreate;
 let focusIds = [];
+let zoomCalls = 0;
 fake.on('message', (raw) => {
   const { id, op, params } = JSON.parse(raw);
   lastParams = params;
+  if (op === 'create_items') lastCreate = params;
+  if (op === 'zoom_to') { zoomCalls++; return fake.send(JSON.stringify({ id, error: 'Board is not rendering (window covered or minimized)' })); }
   const result = op === 'get_board_info' ? { id: 'b1', createdAt: 't' }
     : op === 'get_focus_ids' ? focusIds
     : op === 'set_focus' ? ((focusIds = params.ids), { focus: params.ids.length })
     : op === 'get_items' && params.ids ? [...RAW, ...EXTRA].filter((i) => params.ids.includes(i.id))
     : op === 'get_items' || op === 'get_selection' ? RAW
     : op === 'create_items' ? params.items.map((it, n) => ({ id: `n${n}`, type: it.type, ...it.props, createdBy: 'u' }))
+    : op === 'group' ? { id: 'g1', type: 'group', itemsIds: params.ids }
     : { op, params };
   fake.send(JSON.stringify(op === 'delete_items' ? { id, error: 'boom' } : { id, result }));
 });
@@ -98,6 +103,23 @@ assert.deepEqual(lastParams.items[0].props, { x: 0, url: 'data:image/png;base64,
 assert.deepEqual(json(r), [{ id: 'n0', type: 'image', x: 0 }]);
 r = await client.callTool({ name: 'create_items', arguments: { items: [{ type: 'image', props: { path: 'C:/x/notes.txt' } }] } });
 assert.ok(r.isError && /Not an image file/.test(r.content[0].text));
+// drawings: inline svg becomes a data URL
+await client.callTool({ name: 'create_items', arguments: { items: [{ type: 'image', props: { svg: '<svg/>', x: 0 } }] } });
+assert.deepEqual(lastParams.items[0].props, { x: 0, url: 'data:image/svg+xml;base64,PHN2Zy8+' });
+
+// tables: unreadable through the SDK, so compact output says how to see one
+r = await client.callTool({ name: 'get_items', arguments: { ids: ['t1'] } });
+assert.match(json(r)[0].note, /table.*capture/);
+// create_table: ragged rows padded, HTML escaped, x/y = top-left, cells grouped
+r = await client.callTool({ name: 'create_table', arguments: { rows: [['A', 'B'], ['<1>']], x: 0, y: 0, colWidth: 100, rowHeight: 50 } });
+assert.deepEqual(json(r), { group: 'g1', rows: 2, columns: 2, cells: ['n0', 'n1', 'n2', 'n3'] });
+assert.deepEqual(lastCreate.items.map((i) => [i.props.content, i.props.x, i.props.y]), [['A', 50, 25], ['B', 150, 25], ['&lt;1&gt;', 50, 75], ['', 150, 75]]);
+assert.equal(lastCreate.items[0].props.style.fillColor, '#e6e6e6', 'header row shaded');
+
+// a board that is not rendering: the bridge raises the Miro window once and retries (Windows), else passes the error on
+r = await client.callTool({ name: 'zoom_to', arguments: { ids: ['s1'] } });
+assert.ok(r.isError && /not rendering/.test(r.content[0].text));
+assert.equal(zoomCalls, process.platform === 'win32' && !/Could not bring/.test(r.content[0].text) ? 2 : 1, r.content[0].text);
 
 // arrange: ids order kept, uniform cells from largest item (199x228), starts at the items' top-left (101, 50)
 r = await client.callTool({ name: 'arrange_items', arguments: { ids: ['s2', 's1', 'c1'], layout: 'row', gap: 40 } });

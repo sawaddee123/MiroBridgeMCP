@@ -14,6 +14,8 @@ const CREATE = {
 };
 const plain = (x) => JSON.parse(JSON.stringify(x)); // SDK items are class instances
 const byIds = (ids) => Promise.all(ids.map((id) => miro.board.getById(id)));
+// Miro stops rendering a covered/minimized window; frame moves and zoom then fail. The bridge raises the window and retries on this text.
+const NOT_RENDERING = 'Board is not rendering (window covered or minimized)';
 
 async function addToFrame(item, parentId) {
   const frame = await miro.board.getById(parentId);
@@ -22,7 +24,7 @@ async function addToFrame(item, parentId) {
   for (let attempt = 1; ; attempt++) {
     try { return await frame.add(item); } catch (err) {
       if (attempt >= 4 || !/inside a parent frame/.test(err?.message)) {
-        throw new Error(`${err?.message || err}. Keep the board window visible (not minimized) while adding items to frames.`);
+        throw new Error(`${err?.message || err} ${NOT_RENDERING}`);
       }
       await new Promise((r) => setTimeout(r, 400 * attempt));
     }
@@ -38,7 +40,10 @@ const ops = {
     try {
       for (const { type, props } of items) {
         const { parentId, ...rest } = props;
-        const item = await miro.board[CREATE[type]](rest);
+        const item = await miro.board[CREATE[type]](rest).catch((err) => { // flowchart/UML shapes live in the experimental API
+          if (type !== 'shape' || !miro.board.experimental?.createShape) throw err;
+          return miro.board.experimental.createShape(rest).catch(() => { throw err; });
+        });
         out.push(item);
         if (parentId) await addToFrame(item, parentId);
       }
@@ -78,8 +83,16 @@ const ops = {
     return { focus: ids.length };
   },
   async zoom_to({ ids }) {
-    await miro.board.viewport.zoomTo(await byIds(ids));
+    const zoom = miro.board.viewport.zoomTo(await byIds(ids)); // never settles while the window is not rendered
+    await Promise.race([zoom, new Promise((_, no) => setTimeout(() => no(new Error(NOT_RENDERING)), 4000))]);
     return { ok: true };
+  },
+  group: async ({ ids }) => miro.board.group({ items: await byIds(ids) }),
+  ungroup: async ({ id }) => (await miro.board.getById(id)).ungroup(),
+  async reorder({ ids, to }) {
+    const items = await byIds(ids);
+    await (to === 'front' ? miro.board.bringToFront(items) : miro.board.sendToBack(items));
+    return { ok: true, moved: items.length };
   },
 };
 

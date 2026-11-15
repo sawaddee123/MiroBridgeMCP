@@ -23,7 +23,8 @@ MiroBridgeMCP รันแอปเล็กๆ อยู่ในบอร์�
 - **ใช้กับ AI หลายแอปพร้อมกัน** — เปิด Claude Code กับ Antigravity (หรือ Cursor ฯลฯ) พร้อมกันได้ ใช้ bridge ตัวเดียวกัน
 - **ไม่ต้องกด F5** — มี background service เล็กๆ เปิด bridge ไว้ตลอด เปิดบอร์ดตอนไหนก็ต่อได้ทันที
 - **สร้างทีละหลายชิ้น** — sticky, shape, text, card, เฟรม, เส้นเชื่อม (ตรง/หักมุม/โค้ง, ลูกศร, ข้อความบนเส้น), รูปจาก URL *หรือไฟล์ในเครื่อง*, embed · ถ้าพังกลางชุดจะยกเลิกทั้งชุด
-- **จัด layout** — `arrange_items` จัดเป็น grid, แถว หรือคอลัมน์
+- **จัด layout** — `arrange_items` จัดเป็น grid, แถว หรือคอลัมน์; `group_items` และ `reorder_items` (หน้า/หลัง)
+- **ตารางและภาพวาด** — Web SDK อ่าน/สร้างตาราง Miro และเส้นปากกาไม่ได้ AI ดูด้วย `capture` วาดตารางด้วย `create_table` (shape จัดกลุ่ม) และวาดรูปเป็นภาพ SVG
 - **ดูผลงาน** — `capture` แคปหน้าต่าง Miro ให้ AI ตรวจงานตัวเอง (Windows)
 
 ## ติดตั้ง (≈3 นาที ทำครั้งเดียว)
@@ -81,6 +82,9 @@ focus ที่เฟรม = ได้ของทุกชิ้นบนเ�
 | `delete_items` | ลบตาม id (เส้นที่หายไปพร้อม shape นับเป็น `alreadyGone`) |
 | `arrange_items` | จัด grid / แถว / คอลัมน์ |
 | `zoom_to` | เลื่อนจอไปที่ items |
+| `group_items` | จัดกลุ่ม / แยกกลุ่ม |
+| `reorder_items` | ยกไปหน้าสุด / ส่งไปหลังสุด |
+| `create_table` | วาดตารางเป็นกริดของ shape (SDK ไม่มีตาราง Miro จริง) |
 | `capture` | แคปหน้าต่าง Miro (Windows) |
 
 ทุก tool มี icon และ safety hint ตามมาตรฐาน MCP (`readOnlyHint` / `destructiveHint`) client จึงอนุญาต tool ที่อ่านอย่างเดียวได้อัตโนมัติ และถามก่อนลบ
@@ -95,7 +99,7 @@ focus ที่เฟรม = ได้ของทุกชิ้นบนเ�
 | ต่อได้ต่อเมื่อกด F5 | background service ไม่ได้รัน → รัน `miro-bridge-mcp setup` 1 ครั้ง |
 | ไม่มีเมนูในแถบเครื่องมือ | ฟีเจอร์ beta: รัน `check` เพื่อดูสาเหตุ ระหว่างนี้ใช้ไอคอนแอปแทน |
 | ใช้ Brave แล้วไม่ต่อ | Settings → Privacy → **Localhost access** ให้ miro.com (หรือปิด Shields ที่ miro.com) |
-| `isn't inside a parent frame` | เปิดหน้าต่างบอร์ดไว้บนจอ ระหว่างสร้างของในเฟรม |
+| `isn't inside a parent frame` | Miro หยุดวาดหน้าต่างที่ถูกบัง บน Windows bridge จะยกหน้าต่างขึ้นมา (ไม่แย่งโฟกัส) แล้วลองใหม่ให้เอง OS อื่นให้เปิดไว้บนจอ |
 | `capture` ใช้ไม่ได้ | รองรับเฉพาะ Windows และหน้าต่าง Miro ต้องไม่ถูกย่อ (ถูกบังได้) |
 | `port 7788 is used by another program` | ตั้ง `MIRO_BRIDGE_PORT` และ App URL เป็นพอร์ตอื่น |
 | Safari | ไม่รองรับ (บล็อก localhost) ใช้ Chrome/Edge/Miro desktop |

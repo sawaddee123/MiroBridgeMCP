@@ -139,6 +139,22 @@ function call(op, params = {}) {
   });
 }
 
+// Run a PowerShell script shipped with the package (capture.ps1). Resolves stdout, rejects with the first stderr line.
+const ps = (file, args) => new Promise((resolve, reject) => execFile('powershell.exe',
+  ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL(file, import.meta.url)), ...args],
+  (e, stdout, stderr) => (e ? reject(new Error((stderr || e.message).split('\n')[0].trim())) : resolve(stdout.trim()))));
+
+// Miro does not render a covered/minimized window, and then frame moves and zoom fail. Bring the window to the
+// front without stealing focus and retry once (the failed create batch was rolled back, updates are idempotent).
+async function visible(op, params) {
+  try { return await call(op, params); } catch (e) {
+    if (!/not rendering|inside a parent frame/.test(e.message) || process.platform !== 'win32') throw e;
+    await ps('./capture.ps1', ['-Raise']).catch((r) => { throw new Error(`${e.message}. Could not bring Miro to the front: ${r.message}`); });
+    await new Promise((r) => setTimeout(r, 1000)); // let Miro paint once
+    return call(op, params);
+  }
+}
+
 // --- MCP tools ---
 const mcp = new McpServer({ name: 'MiroBridgeMCP', title: 'Miro Bridge', version: VERSION, icons: SERVER_ICON });
 // hints let clients auto-approve reads and ask before destructive calls
@@ -170,13 +186,28 @@ function compact(i) {
   if (i.end?.item) o.to = i.end.item;
   if (i.captions?.length) o.captions = i.captions.map((c) => plainText(c.content));
   if (i.url && !i.url.startsWith('data:')) o.url = i.url;
+  if (i.rotation) o.rotation = i.rotation;
+  if (i.tagIds?.length) o.tagIds = i.tagIds;
+  if (i.taskStatus && i.taskStatus !== 'none') o.taskStatus = i.taskStatus;
+  if (i.dueDate) o.dueDate = i.dueDate;
+  if (i.assignee?.userId) o.assignee = i.assignee.userId;
+  if (OPAQUE[i.type]) o.note = OPAQUE[i.type];
   return o;
 }
-const compactMany = (op) => async (args) => (await call(op, args)).map(compact);
+const compactMany = (op) => async (args) => (await visible(op, args)).map(compact);
+// The Web SDK returns only the bounding box of these; their contents are visible only on screen.
+const OPAQUE = {
+  unsupported: 'Miro table (or another item the SDK cannot read): contents unreadable, call capture with its id to see it. Cannot be created; use create_table.',
+  curve: 'freehand drawing: only its bounding box is readable, call capture with its id to see it. Draw new ones as image {svg}.',
+};
 
 // Local image file -> data URL (Miro's servers can't fetch localhost, but the SDK accepts data URLs).
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };
 async function withFile(item) {
+  if (item.type === 'image' && item.props.svg) { // drawings: the SDK cannot create freehand strokes, an SVG image can
+    const { svg, ...props } = item.props;
+    return { ...item, props: { ...props, url: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` } };
+  }
   if (item.type !== 'image' || !item.props.path) return item;
   const { path, ...props } = item.props;
   const mime = MIME[extname(path).slice(1).toLowerCase()];
@@ -184,7 +215,10 @@ async function withFile(item) {
   return { ...item, props: { ...props, url: `data:${mime};base64,${(await readFile(path)).toString('base64')}` } };
 }
 
-const ITEM_TYPES = ['sticky_note', 'shape', 'text', 'card', 'app_card', 'frame', 'connector', 'image', 'embed', 'preview', 'group'];
+const ITEM_TYPES = 'sticky_note, shape, text, card, app_card, frame, connector, image, embed, preview, group, curve (freehand drawing), unsupported (tables and other items the SDK cannot read)';
+const SHAPES = 'rectangle, round_rectangle, circle, triangle, rhombus, parallelogram, trapezoid, pentagon, hexagon, octagon, star, cross, cloud, can, ' +
+  'wedge_round_rectangle_callout, right_arrow, left_arrow, left_right_arrow, left_brace, right_brace, flow_chart_predefined_process; ' +
+  "other flow_chart_* names (process, decision, terminator, document, ...) are tried through Miro's experimental API";
 const ids = z.array(z.string()).min(1);
 const ITEM_FIELDS = 'Items come back compact: {id, type, content/title as plain text, x, y, width, height, parentId, fill (= style.fillColor), from/to (connector ends)}. ' +
   'x/y of an item with parentId are relative to the frame top-left.';
@@ -219,7 +253,7 @@ tool('get_board_info',
   });
 tool('get_items',
   `List board items, filtered by type, ids and/or parentId (a frame id). ${ITEM_FIELDS} Pass full:true only if you need raw Web SDK fields.`,
-  { type: z.array(z.enum(ITEM_TYPES)).optional(), ids: ids.optional(), parentId: z.string().optional(), full: z.boolean().optional() },
+  { type: z.array(z.string()).optional().describe(ITEM_TYPES), ids: ids.optional(), parentId: z.string().optional(), full: z.boolean().optional() },
   async ({ parentId, full, ...query }) => {
     let items = await call('get_items', query);
     if (parentId) items = items.filter((i) => i.parentId === parentId);
@@ -233,11 +267,11 @@ tool('set_focus', `Set the focus to these ids (frames include their children), o
 tool('get_selection', 'Items the user currently has selected on the board (compact).', {}, compactMany('get_selection'));
 tool('create_items',
   'Create one or many items in one call. Each entry is {type, props}; props are Web SDK create props, e.g. ' +
-  'sticky_note {content:"<p>hi</p>", x, y, style:{fillColor:"light_yellow"}}; shape {shape:"rectangle", content, x, y, width, height}; ' +
+  'sticky_note {content:"<p>hi</p>", x, y, style:{fillColor:"light_yellow"}}; shape {shape:"rectangle", content, x, y, width, height, style:{fillColor, borderColor, borderWidth, color, fontSize, textAlign}} (shape: ' + SHAPES + '); ' +
   'text {content, x, y}; frame {title, x, y, width, height}; connector {start:{item:id, snapTo:"right"}, end:{item:id, snapTo:"left"}, shape:"curved"|"straight"|"elbowed", style:{strokeColor:"#1a1a1a", strokeWidth:2, strokeStyle:"dashed", startStrokeCap:"none", endStrokeCap:"arrow"}, captions:[{content}]} (snapTo: auto|top|right|bottom|left); ' +
-  'card {title, description, x, y}; image {url, x, y} or {path:"C:/local/file.png", x, y, width}; embed {url, x, y}. Add parentId to place the item inside a frame (x/y here are still board coordinates). Returns created items (compact).',
+  'card {title, description, x, y}; image {url, x, y} or {path:"C:/local/file.png", x, y, width} or {svg:"<svg xmlns=... width height viewBox>...</svg>", x, y} (svg = drawings / freehand strokes); embed {url, x, y}. Add parentId to place the item inside a frame (x/y here are still board coordinates). Returns created items (compact).',
   { items: z.array(z.object({ type: z.enum(['sticky_note', 'shape', 'text', 'card', 'app_card', 'frame', 'connector', 'image', 'embed']), props: z.record(z.any()) })).min(1) },
-  async ({ items }) => (await call('create_items', { items: await Promise.all(items.map(withFile)) })).map(compact));
+  async ({ items }) => (await visible('create_items', { items: await Promise.all(items.map(withFile)) })).map(compact));
 tool('update_items',
   'Update items: each entry is {id, props}; props are merged into the item (nested style is merged too) then synced. ' +
   'props.parentId: a frame id moves the item into that frame (it must lie inside the frame), null takes it out. Returns updated items (compact).',
@@ -264,7 +298,36 @@ tool('arrange_items',
     return { moved: items.length, columns: cols };
   });
 tool('delete_items', 'Delete items by id. Deleting an item also deletes connectors attached to it; ids already gone are counted in alreadyGone.', { ids });
-tool('zoom_to', 'Move the viewport so the given items are visible.', { ids });
+tool('zoom_to', 'Move the viewport so the given items are visible.', { ids }, (args) => visible('zoom_to', args));
+tool('group_items', 'Group items (ids) so they move together, or ungroup a group (ungroupId). Returns the group, or the freed item ids.',
+  { ids: ids.optional(), ungroupId: z.string().optional() },
+  async ({ ids: list, ungroupId }) => {
+    if (ungroupId) return (await call('ungroup', { id: ungroupId })).map((i) => i.id);
+    if (!list) throw new Error('Give ids or ungroupId');
+    const g = await call('group', { ids: list });
+    return { id: g.id, itemsIds: g.itemsIds };
+  });
+tool('reorder_items', 'Bring items to the front or send them to the back (z-order), e.g. text hidden behind a shape.',
+  { ids, to: z.enum(['front', 'back']) }, (args) => call('reorder', args));
+const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+tool('create_table',
+  'Draw a table as a grid of rectangle shapes, grouped. Native Miro tables cannot be created or read through the Web SDK ' +
+  '(they show up as type "unsupported"; read one with capture). rows[0] is the header when header is true. x/y = top-left (board coordinates). ' +
+  'cells are ids row by row; edit a cell with update_items.',
+  { rows: z.array(z.array(z.string())).min(1), x: z.number(), y: z.number(), colWidth: z.number().min(20).default(200), rowHeight: z.number().min(20).default(60),
+    header: z.boolean().default(true), parentId: z.string().optional() },
+  async ({ rows, x, y, colWidth, rowHeight, header, parentId }) => {
+    const cols = Math.max(...rows.map((r) => r.length));
+    const items = rows.flatMap((r, i) => Array.from({ length: cols }, (_, j) => ({ type: 'shape', props: {
+      shape: 'rectangle', content: esc(r[j] ?? ''), width: colWidth, height: rowHeight,
+      x: x + j * colWidth + colWidth / 2, y: y + i * rowHeight + rowHeight / 2, ...(parentId && { parentId }),
+      style: { fillColor: header && i === 0 ? '#e6e6e6' : '#ffffff', borderColor: '#1a1a1a', borderWidth: 1, fontSize: 14 },
+    } })));
+    const cells = (await visible('create_items', { items })).map((c) => c.id);
+    // grouping is a convenience: if Miro refuses it the table is still usable, so report instead of failing
+    const group = await call('group', { ids: cells }).then((g) => g.id, (e) => `not grouped: ${e.message}`);
+    return { group, rows: rows.length, columns: cols, cells };
+  });
 
 mcp.registerTool('capture', {
   description: 'Screenshot of the Miro window so you can see the result. Optionally zoom to ids first. Windows only; the board window must not be minimized (it may be behind others). ~1.5k tokens per image, so capture once after a batch of changes, not after every call.',
@@ -272,11 +335,9 @@ mcp.registerTool('capture', {
 }, async ({ ids: zoomIds, maxWidth }) => {
   try {
     if (process.platform !== 'win32') throw new Error('capture is Windows-only for now; ask the user to look at the board instead.');
-    if (zoomIds) { await call('zoom_to', { ids: zoomIds }); await new Promise((r) => setTimeout(r, 1500)); } // let the zoom animation finish
+    if (zoomIds) { await visible('zoom_to', { ids: zoomIds }); await new Promise((r) => setTimeout(r, 1500)); } // let the zoom animation finish
     const out = join(tmpdir(), `miro-capture-${process.pid}.png`);
-    const info = await new Promise((resolve, reject) => execFile('powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL('./capture.ps1', import.meta.url)), '-Out', out, '-MaxWidth', String(maxWidth)],
-      (e, stdout, stderr) => (e ? reject(new Error((stderr || e.message).split('\n')[0].trim())) : resolve(stdout.trim()))));
+    const info = await ps('./capture.ps1', ['-Out', out, '-MaxWidth', String(maxWidth)]);
     return { content: [{ type: 'image', data: (await readFile(out)).toString('base64'), mimeType: 'image/png' }, { type: 'text', text: info }] };
   } catch (e) {
     return { isError: true, content: [{ type: 'text', text: e.message }] };

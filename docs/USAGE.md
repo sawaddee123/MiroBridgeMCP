@@ -71,7 +71,8 @@ Tip: pin the app icon (left toolbar → **More apps** → star it) so it's one c
 
 - **Deleting a shape deletes its connectors.** `delete_items` reports them as `alreadyGone`.
 - **Coordinates inside frames are relative.** You create items with board coordinates; reading them back gives coordinates relative to the frame's top-left. Tool descriptions tell the AI this.
-- **Keep the board window visible while building inside frames.** With the window minimized or long in the background, Miro stops computing frames: adding to a frame fails with *"isn't inside a parent frame"* and `zoom_to` times out. A failed batch is rolled back, so nothing half-done is left.
+- **Miro stops rendering a covered or minimized window.** Then adding to a frame fails with *"isn't inside a parent frame"* and `zoom_to` never finishes. On Windows the bridge brings the Miro window to the front without taking keyboard focus and retries once; elsewhere keep it on screen. A failed batch is rolled back, so nothing half-done is left.
+- **Tables and pen drawings are opaque to the SDK.** They come back as `unsupported` / `curve` with only a bounding box; the AI reads them with `capture`. It cannot create native tables (it draws one with `create_table`) or pen strokes (it draws an SVG image).
 - **Several board tabs:** the newest tab receives commands; closing it falls back to the previous one.
 - **Rate limits:** the Web SDK has per-user, per-minute limits. Big batches are fine; thousands of single calls are not.
 
